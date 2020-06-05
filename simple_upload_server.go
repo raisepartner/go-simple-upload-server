@@ -24,6 +24,7 @@ func run(args []string) int {
 	certFile := flag.String("cert", "", "path to certificate file")
 	keyFile := flag.String("key", "", "path to key file")
 	corsEnabled := flag.Bool("cors", false, "if true, add ACAO header to support CORS")
+	unarchive := flag.Bool("unarchive", false, "if true, files with names ending in .tar, .tar.gz or .zip are unarchived")
 	flag.Parse()
 	serverRoot := flag.Arg(0)
 	if len(serverRoot) == 0 {
@@ -47,7 +48,7 @@ func run(args []string) int {
 		logger.WithField("token", token).Warn("token generated")
 	}
 	tlsEnabled := *certFile != "" && *keyFile != ""
-	server := NewServer(serverRoot, *maxUploadSize, token, *corsEnabled)
+	server := NewServer(serverRoot, *maxUploadSize, token, *corsEnabled, *unarchive)
 	http.Handle("/upload", server)
 	http.Handle("/files/", server)
 
@@ -61,6 +62,7 @@ func run(args []string) int {
 			"upload_limit": *maxUploadSize,
 			"root":         serverRoot,
 			"cors":         *corsEnabled,
+			"unarchive":         *unarchive,
 		}).Info("start listening")
 
 		if err := http.ListenAndServe(fmt.Sprintf("%s:%d", *bindAddress, *listenPort), nil); err != nil {

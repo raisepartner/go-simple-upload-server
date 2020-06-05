@@ -22,15 +22,17 @@ type Server struct {
 	MaxUploadSize int64
 	SecureToken   string
 	EnableCORS    bool
+	Unarchive     bool
 }
 
 // NewServer creates a new simple-upload server.
-func NewServer(documentRoot string, maxUploadSize int64, token string, enableCORS bool) Server {
+func NewServer(documentRoot string, maxUploadSize int64, token string, enableCORS bool, unarchive bool) Server {
 	return Server{
 		DocumentRoot:  documentRoot,
 		MaxUploadSize: maxUploadSize,
 		SecureToken:   token,
 		EnableCORS:    enableCORS,
+		Unarchive: 	   unarchive,
 	}
 }
 
@@ -105,6 +107,19 @@ func (s Server) handlePost(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		writeError(w, fmt.Errorf("the size of uploaded content is %d, but %d bytes written", size, written))
 	}
+	kind := "file"
+	if s.Unarchive {
+		kind, err = unarchive(dstPath, s.DocumentRoot)
+		if err != nil && kind != "" {
+			logger.WithError(err).WithFields(logrus.Fields{
+				"kind": kind,
+				"path": dstPath,
+			}).Error("un-archive failed")
+			w.WriteHeader(http.StatusInternalServerError)
+			writeError(w, err)
+			return
+		}
+	}
 	uploadedURL := strings.TrimPrefix(dstPath, s.DocumentRoot)
 	if !strings.HasPrefix(uploadedURL, "/") {
 		uploadedURL = "/" + uploadedURL
@@ -114,6 +129,7 @@ func (s Server) handlePost(w http.ResponseWriter, r *http.Request) {
 		"path": dstPath,
 		"url":  uploadedURL,
 		"size": size,
+		"kind": kind,
 	}).Info("file uploaded by POST")
 	if s.EnableCORS {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
@@ -189,10 +205,24 @@ func (s Server) handlePut(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
+	kind := "file"
+	if s.Unarchive {
+		kind, err = unarchive(targetPath, s.DocumentRoot)
+		if err == nil && kind != "" {
+			logger.WithError(err).WithFields(logrus.Fields{
+				"kind": kind,
+				"path": targetPath,
+			}).Error("un-archive failed")
+			w.WriteHeader(http.StatusInternalServerError)
+			writeError(w, err)
+			return
+		}
+	}
 
 	logger.WithFields(logrus.Fields{
 		"path": r.URL.Path,
 		"size": n,
+		"kind": kind,
 	}).Info("file uploaded by PUT")
 	if s.EnableCORS {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
